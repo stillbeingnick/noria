@@ -176,7 +176,7 @@ impl ControllerHandle<consensus::ZookeeperAuthority> {
 // this alias is needed to work around -> impl Trait capturing _all_ lifetimes by default
 // the A parameter is needed so it gets captured into the impl Trait
 #[cfg(not(doc))]
-type RpcFuture<A, R> = impl Future<Output = Result<R, failure::Error>>;
+type RpcFuture<A: consensus::Authority + 'static, R> = impl Future<Output = Result<R, failure::Error>>;
 #[cfg(doc)]
 type RpcFuture<A, R> = crate::doc_mock::FutureWithExtra<Result<R, failure::Error>, A>;
 
@@ -353,7 +353,6 @@ impl<A: Authority + 'static> ControllerHandle<A> {
             .map_err(move |e| e.context(format!("building table for {}", name)).into())
         }
     }
-
     #[doc(hidden)]
     pub fn rpc<Q: Serialize, R: 'static>(
         &mut self,
@@ -369,69 +368,72 @@ impl<A: Authority + 'static> ControllerHandle<A> {
 
         finalize(fut, err)
     }
-
+    // Nicholas Still
+    // removing the opaque return type of all member function on struct after rpc related to #94081
+    // this PR makes a breaking change to opaque type layering
+    // instead of returning an opaque type with the result hidden the entire function
+    // is labeled async and returned to the caller
+    // not entirely sure the ramifications of this
     /// Get statistics about the time spent processing different parts of the graph.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn statistics(
+    pub async fn statistics(
         &mut self,
-    ) -> impl Future<Output = Result<stats::GraphStats, failure::Error>> {
-        self.rpc("get_statistics", (), "failed to get stats")
+    ) -> Result<stats::GraphStats, failure::Error> {
+        self.rpc("get_statistics", (), "failed to get stats").await
     }
 
     /// Flush all partial state, evicting all rows present.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn flush_partial(&mut self) -> impl Future<Output = Result<(), failure::Error>> {
-        self.rpc("flush_partial", (), "failed to flush partial")
+    pub async fn flush_partial(&mut self) -> Result<(), failure::Error> {
+        self.rpc("flush_partial", (), "failed to flush partial").await
     }
 
     /// Extend the existing recipe with the given set of queries.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn extend_recipe(
+    pub async fn extend_recipe(
         &mut self,
         recipe_addition: &str,
-    ) -> impl Future<Output = Result<ActivationResult, failure::Error>> {
-        self.rpc("extend_recipe", recipe_addition, "failed to extend recipe")
+    ) -> Result<ActivationResult, failure::Error>{
+        self.rpc("extend_recipe", recipe_addition, "failed to extend recipe").await
     }
 
     /// Replace the existing recipe with this one.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn install_recipe(
+    pub async fn install_recipe(
         &mut self,
         new_recipe: &str,
-    ) -> impl Future<Output = Result<ActivationResult, failure::Error>> {
-        self.rpc("install_recipe", new_recipe, "failed to install recipe")
+    ) -> Result<ActivationResult, failure::Error> {
+        self.rpc("install_recipe", new_recipe, "failed to install recipe").await
     }
-
     /// Fetch a graphviz description of the dataflow graph.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn graphviz(&mut self) -> impl Future<Output = Result<String, failure::Error>> {
-        self.rpc("graphviz", (), "failed to fetch graphviz output")
+    pub async fn graphviz(&mut self) -> Result<String, failure::Error> {
+        self.rpc("graphviz", (), "failed to fetch graphviz output").await
     }
-
     /// Fetch a simplified graphviz description of the dataflow graph.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn simple_graphviz(&mut self) -> impl Future<Output = Result<String, failure::Error>> {
+    pub async fn simple_graphviz(&mut self) -> Result<String, failure::Error>{
         self.rpc(
             "simple_graphviz",
             (),
             "failed to fetch simple graphviz output",
-        )
+        ).await
     }
-
     /// Remove the given external view from the graph.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn remove_node(
+    pub async fn remove_node(
         &mut self,
         view: NodeIndex,
-    ) -> impl Future<Output = Result<(), failure::Error>> {
+    ) -> Result<(), failure::Error> {
         // TODO: this should likely take a view name, and we should verify that it's a Reader.
-        self.rpc("remove_node", view, "failed to remove node")
+        self.rpc("remove_node", view, "failed to remove node").await
     }
 }
+
